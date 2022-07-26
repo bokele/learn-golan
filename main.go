@@ -1,51 +1,101 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
+	"strconv"
+
+	"github.com/gorilla/mux"
 )
 
-func helloHandler(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/hello" {
-		http.Error(w, "404 not found", http.StatusNotFound)
-		return
-	}
-	if r.Method != "GET" {
-		http.Error(w, "Method is not  supported", http.StatusNotFound)
-		return
-	}
-
-	fmt.Fprint(w, "hello")
+type Movie struct {
+	ID       string    `json:"id"`
+	Isbn     string    `json:"isbn"`
+	Title    string    `json:"title"`
+	Director *Director `json:"director"`
 }
-func formHandler(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/hello" {
-		http.Error(w, "404 not found", http.StatusNotFound)
-		return
-	}
-
-	if err := r.ParseForm(); err != nil {
-		fmt.Fprint(w, "PerseForm() err: %w", err)
-		return
-	}
-
-	fmt.Fprintf(w, "POST request sucessful\n")
-	email := r.FormValue("email")
-	password := r.FormValue("password")
-
-	fmt.Fprintf(w, "Email = %s\n", email)
-	fmt.Fprintf(w, "Password = %s\n", password)
+type Director struct {
+	FirstName string `json:"firstName"`
+	LastName  string `json:"LastName"`
 }
+
+func getMovies(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(movies)
+
+}
+func getMovie(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	parms := mux.Vars(r)
+	for _, item := range movies {
+		if item.ID == parms["id"] {
+			json.NewEncoder(w).Encode(item)
+			return
+		}
+	}
+}
+func createMovie(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	var movie Movie
+	_ = json.NewDecoder(r.Body).Decode(&movie)
+	movie.ID = strconv.Itoa(rand.Intn(100000000000))
+	movies = append(movies, movie)
+	json.NewEncoder(w).Encode(movie)
+}
+func updateMovie(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	parms := mux.Vars(r)
+
+	for index, item := range movies {
+		if item.ID == parms["id"] {
+			movies = append(movies[:index], movies[index+1:]...)
+			var movie Movie
+			_ = json.NewDecoder(r.Body).Decode(&movie)
+			movie.ID = strconv.Itoa(rand.Intn(100000000000))
+			movies = append(movies, movie)
+			json.NewEncoder(w).Encode(movie)
+			return
+		}
+	}
+}
+func deleteMovie(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	parms := mux.Vars(r)
+
+	for index, item := range movies {
+		if item.ID == parms["id"] {
+			movies = append(movies[:index], movies[index+1:]...)
+			break
+		}
+	}
+	json.NewEncoder(w).Encode(movies)
+}
+
+var movies []Movie
 
 func main() {
-	fileServer := http.FileServer(http.Dir("./static"))
-	http.Handle("/", fileServer)
-	http.HandleFunc("/form", formHandler)
-	http.HandleFunc("/hello", helloHandler)
+	r := mux.NewRouter()
 
-	fmt.Printf("starting the server at port 8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		log.Fatal(err)
-	}
+	r.HandleFunc("/movies", getMovies).Methods("GET")
+	r.HandleFunc("/movies/{id}", getMovie).Methods("GET")
+	r.HandleFunc("/movies", createMovie).Methods("POST")
+	r.HandleFunc("/movies", updateMovie).Methods("PUT")
+	r.HandleFunc("/movies/{id}", deleteMovie).Methods("DELETE")
 
+	movies = append(movies,
+		Movie{ID: "1", Isbn: "123456", Title: "Bokele",
+			Director: &Director{FirstName: "John", LastName: "Wacwa"},
+		},
+	)
+	movies = append(movies,
+		Movie{ID: "2", Isbn: "123457", Title: "Bokele1",
+			Director: &Director{FirstName: "John1", LastName: "Wacwa1"},
+		},
+	)
+
+	fmt.Printf("Start the server at port 8000")
+	log.Fatal(http.ListenAndServe(":8000", r))
 }
